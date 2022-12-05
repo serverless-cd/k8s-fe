@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "simple-gitlab-postgresql.fullname" . }}
+  labels:
+    {{- include "simple-gitlab-postgresql.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "simple-gitlab-postgresql.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "simple-gitlab-postgresql.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: DB_USER
+              value: gitlab
+            - name: DB_PASS
+              value: admin@1234
+            - name: DB_NAME
+              value: gitlab_production
+            - name: DB_EXTENSION
+              value: 'pg_trgm,btree_gist'
+          ports:
+            - name: postgresql
+              containerPort: {{ include "simple-gitlab-postgresql.servicePort" . }}
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command: ["pg_isready","-h","localhost","-U","postgres"]
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["pg_isready","-h","localhost","-U","postgres"]
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          volumeMounts:
+            - name: gitlab-postgresql-persistent-storage
+              mountPath: /var/lib/postgresql
+      volumes:
+        - name: gitlab-postgresql-persistent-storage
+          persistentVolumeClaim:
+            claimName: {{ template "simple-gitlab-postgresql.fullname" . }}
+          
